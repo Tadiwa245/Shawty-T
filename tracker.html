@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Order Tracker — Avroy Shlain with Shawty T</title>
+<style>
+  :root{
+    --bg:#fff6ef; --bg-panel:#ffffff; --gold:#ff6b4a; --gold-bright:#ffb13d;
+    --cream:#3a1b2e; --muted:#8a6f66; --line:#f2ddc9;
+    --serif:'Iowan Old Style','Georgia', serif; --sans:'Helvetica Neue', Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--cream);font-family:var(--sans);min-height:100vh;
+    display:flex;flex-direction:column;align-items:center;}
+  a{color:var(--gold-bright);}
+  header{width:100%;border-bottom:1px solid var(--line);padding:18px 24px;text-align:center;}
+  header .name{font-family:var(--serif);font-size:22px;color:var(--gold-bright);}
+  header .sub{font-size:11px;letter-spacing:3px;color:var(--muted);text-transform:uppercase;margin-top:4px;}
+  main{max-width:520px;width:100%;padding:60px 24px;text-align:center;}
+  .lock{font-size:34px;margin-bottom:10px;}
+  h1{font-family:var(--serif);font-size:30px;margin:0 0 10px;}
+  p.lead{color:var(--muted);font-size:14px;margin-bottom:32px;}
+  .track-form{display:flex;gap:10px;margin-bottom:30px;}
+  .track-form input{
+    flex:1;padding:13px;background:var(--bg-panel);border:1px solid var(--line);color:var(--cream);font-size:14px;
+  }
+  .track-form button{
+    padding:13px 20px;background:var(--gold);border:none;color:#ffffff;font-weight:700;
+    font-size:12px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;
+  }
+  .track-form button:hover{background:var(--gold-bright);}
+  .result{
+    background:var(--bg-panel);border:1px solid var(--line);padding:26px;text-align:left;display:none;
+  }
+  .result.show{display:block;}
+  .result .ref{color:var(--gold-bright);font-family:var(--serif);font-size:20px;margin-bottom:14px;}
+  .status-track{display:flex;justify-content:space-between;margin:24px 0;position:relative;}
+  .status-track::before{
+    content:'';position:absolute;top:9px;left:0;right:0;height:2px;background:var(--line);
+  }
+  .step{display:flex;flex-direction:column;align-items:center;gap:8px;flex:1;position:relative;z-index:1;}
+  .step .dot{width:20px;height:20px;border-radius:50%;background:var(--bg);border:2px solid var(--line);}
+  .step.done .dot{background:var(--gold);border-color:var(--gold);}
+  .step span{font-size:10px;letter-spacing:0.5px;text-transform:uppercase;color:var(--muted);text-align:center;}
+  .step.done span{color:var(--gold-bright);}
+  .result-row{display:flex;justify-content:space-between;font-size:13px;padding:8px 0;border-bottom:1px solid var(--line);color:var(--muted);}
+  .result-row b{color:var(--cream);}
+  .not-found{color:var(--muted);font-size:13px;}
+  .back-link{margin-top:34px;display:inline-block;font-size:13px;}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+</head>
+<body>
+<header>
+  <div class="name">Avroy Shlain</div>
+  <div class="sub">with Shawty T</div>
+</header>
+<main>
+  <div class="lock">🔒</div>
+  <h1>Track Your Order</h1>
+  <p class="lead">Enter the order reference number you received on WhatsApp after checkout.</p>
+  <div class="track-form">
+    <input id="refInput" placeholder="e.g. AV123456" onkeydown="if(event.key==='Enter')trackOrder()">
+    <button onclick="trackOrder()">Track</button>
+  </div>
+  <div class="result" id="result"></div>
+  <a class="back-link" href="index.html">← Back to shop</a>
+</main>
+
+<script>
+const DB_ON = !!supabaseClient;
+
+async function trackOrder(){
+  const ref = document.getElementById("refInput").value.trim().toUpperCase();
+  const el = document.getElementById("result");
+  if(!ref){ return; }
+  el.innerHTML = `<p class="not-found">Searching…</p>`;
+  el.classList.add("show");
+
+  let order = null;
+  if(DB_ON){
+    const { data, error } = await supabaseClient.from("orders").select("*").ilike("id", ref).single();
+    if(!error) order = data;
+  } else {
+    const orders = JSON.parse(localStorage.getItem("avonOrders")||"[]");
+    order = orders.find(o=>o.id.toUpperCase()===ref);
+  }
+
+  if(!order){
+    const scopeNote = DB_ON
+      ? `If you need help, message us directly on <a href="https://wa.me/263780755665" target="_blank">WhatsApp</a>.`
+      : `Note: order tracking currently only works on the same browser/device the order was placed on, until the site is connected to a shared database. Message us on <a href="https://wa.me/263780755665" target="_blank">WhatsApp</a> for an update.`;
+    el.innerHTML = `<p class="not-found">No order found for reference "${ref}". ${scopeNote}</p>`;
+    return;
+  }
+  const stages = ["Order Received","Confirmed","Packed","Out for Delivery","Delivered"];
+  const currentIdx = Math.max(0, stages.indexOf(order.status));
+  el.innerHTML = `
+    <div class="ref">Order #${order.id}</div>
+    <div class="result-row"><span>Placed</span><b>${order.date}</b></div>
+    <div class="result-row"><span>Items</span><b>${order.items.join(", ")}</b></div>
+    <div class="result-row"><span>Total</span><b>$${order.total.toFixed(2)}</b></div>
+    <div class="status-track">
+      ${stages.map((s,i)=>`
+        <div class="step ${i<=currentIdx?'done':''}">
+          <div class="dot"></div>
+          <span>${s}</span>
+        </div>`).join("")}
+    </div>
+    <p style="font-size:12px;color:var(--muted);text-align:center;">Need an update? Message us on <a href="https://wa.me/263780755665" target="_blank">WhatsApp</a> with your reference number.</p>
+  `;
+}
+</script>
+</body>
+</html>
